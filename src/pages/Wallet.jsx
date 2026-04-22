@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faWallet, faArrowUp, faArrowDown, faPaperPlane, faPhone, faCheckCircle, faTimesCircle, faInfoCircle, faSearch, faFilter, faSort, faSortUp, faSortDown } from '@fortawesome/free-solid-svg-icons';
+import { faWallet, faArrowUp, faArrowDown, faPaperPlane, faPhone, faCheckCircle, faTimesCircle, faInfoCircle, faSearch, faFilter, faSort, faSortUp, faSortDown, faBox, faMoneyBillWave, faCoins, faClock, faPercentage, faSync, faExclamationTriangle } from '@fortawesome/free-solid-svg-icons';
 import { useApp } from '../context/AppContext';
 import { api } from '../utils/api';
 
@@ -22,6 +22,8 @@ const validatePhone = (value) => {
 
 export default function Wallet() {
   const { wallet, platformWallet, depositToWallet, withdrawToPhone, walletTransactions, useApi, setWalletTransactions, setPlatformWallet } = useApp();
+  
+  // State
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [amount, setAmount] = useState('');
@@ -36,6 +38,170 @@ export default function Wallet() {
   const [filterType, setFilterType] = useState('all');
   const [sortField, setSortField] = useState('id');
   const [sortOrder, setSortOrder] = useState('desc');
+  
+  // Package investments state
+  const [investments, setInvestments] = useState([]);
+  const [investmentsLoading, setInvestmentsLoading] = useState(false);
+  const [investmentsError, setInvestmentsError] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  
+  // Package withdraw modal state
+  const [showPackageWithdrawModal, setShowPackageWithdrawModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [packageWithdrawAmount, setPackageWithdrawAmount] = useState('');
+  const [packageWithdrawPhone, setPackageWithdrawPhone] = useState('');
+  const [packageWithdrawProvider, setPackageWithdrawProvider] = useState('MTN');
+  const [packageWithdrawResult, setPackageWithdrawResult] = useState(null);
+
+  // Fetch investments from backend
+  const fetchInvestments = useCallback(async () => {
+    setInvestmentsLoading(true);
+    setInvestmentsError(null);
+    try {
+      if (useApi) {
+        const data = await api.getInvestments();
+        setInvestments(data);
+      } else {
+        // Fallback hardcoded data
+        setInvestments([
+          {
+            packageId: 1,
+            packageName: 'Starter Loan',
+            principalAmount: 5000,
+            principalReturned: 5250,
+            interestReturned: 250,
+            remainingPrincipal: 0,
+            remainingInterest: 0,
+            status: 'completed',
+          },
+          {
+            packageId: 2,
+            packageName: 'Business Loan',
+            principalAmount: 10000,
+            principalReturned: 5400,
+            interestReturned: 400,
+            remainingPrincipal: 4600,
+            remainingInterest: 400,
+            status: 'partial',
+          },
+          {
+            packageId: 3,
+            packageName: 'Premium Loan',
+            principalAmount: 75000,
+            principalReturned: 7500,
+            interestReturned: 0,
+            remainingPrincipal: 67500,
+            remainingInterest: 9000,
+            status: 'partial',
+          },
+        ]);
+      }
+      setLastRefresh(new Date());
+    } catch (error) {
+      console.error('Failed to fetch investments:', error);
+      setInvestmentsError('Failed to load investments');
+    } finally {
+      setInvestmentsLoading(false);
+    }
+  }, [useApi]);
+
+  // Initial fetch and interval refresh
+  useEffect(() => {
+    fetchInvestments();
+    const interval = setInterval(fetchInvestments, 30000); // 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchInvestments]);
+
+  // Handle per-package withdrawal
+  const handlePackageWithdraw = async (pkg) => {
+    const maxWithdraw = pkg.remainingPrincipal;
+    if (maxWithdraw <= 0) {
+      return;
+    }
+    setSelectedPackage(pkg);
+    setPackageWithdrawAmount('');
+    setPackageWithdrawResult(null);
+    setShowPackageWithdrawModal(true);
+  };
+
+  const handlePackageWithdrawSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedPackage || !packageWithdrawAmount) return;
+
+    const parsedAmount = parseFloat(packageWithdrawAmount);
+    const maxWithdraw = selectedPackage.remainingPrincipal;
+    const calculatedFee = Math.floor(parsedAmount * (feePercent / 100));
+
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return;
+    }
+
+    if (parsedAmount > maxWithdraw) {
+      return;
+    }
+
+    if (parsedAmount < 1000) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      if (useApi) {
+        const result = await api.withdrawFromPackage(
+          selectedPackage.packageId, 
+          parsedAmount,
+          packageWithdrawPhone,
+          packageWithdrawProvider,
+          `Withdrawal from ${selectedPackage.packageName}`
+        );
+        if (result?.success) {
+          setPackageWithdrawResult({
+            success: true,
+            message: result.message || 'Withdrawal completed successfully!',
+            withdrawn: result.withdrawn,
+            fee: result.fee,
+            netAmount: result.netAmount,
+            phoneNumber: result.phoneNumber,
+            provider: result.provider,
+            reference: result.reference,
+          });
+          fetchInvestments();
+        } else {
+          setPackageWithdrawResult({
+            success: false,
+            message: result?.message || 'Withdrawal failed',
+          });
+        }
+      } else {
+        setPackageWithdrawResult({
+          success: true,
+          message: `Withdrawal of ${formatUGX(parsedAmount - calculatedFee)} sent to ${packageWithdrawPhone || 'your main wallet'}`,
+          withdrawn: parsedAmount,
+          fee: calculatedFee,
+          netAmount: parsedAmount - calculatedFee,
+          phoneNumber: packageWithdrawPhone,
+          provider: packageWithdrawProvider,
+        });
+        fetchInvestments();
+      }
+    } catch (error) {
+      setPackageWithdrawResult({
+        success: false,
+        message: error.message || 'An error occurred',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const closePackageWithdrawModal = () => {
+    setShowPackageWithdrawModal(false);
+    setSelectedPackage(null);
+    setPackageWithdrawAmount('');
+    setPackageWithdrawPhone('');
+    setPackageWithdrawProvider('MTN');
+    setPackageWithdrawResult(null);
+  };
 
   const feePercent = platformWallet?.feePercentage || 5;
   const calculatedFee = amount ? Math.floor(parseFloat(amount) * (feePercent / 100)) : 0;
@@ -227,6 +393,7 @@ export default function Wallet() {
         </div>
       </div>
 
+      {/* Main & Interest Wallets */}
       <div className="wallet-section">
         <div className="wallet-card">
           <h3><FontAwesomeIcon icon={faWallet} /> Main Wallet</h3>
@@ -249,7 +416,150 @@ export default function Wallet() {
         )}
       </div>
 
-      <div className="card">
+      {/* Package Investments Cards */}
+      <div className="card" style={{ marginTop: '20px' }}>
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h2>Package Investments</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
+              Principal funds and interest earned per package
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+            <FontAwesomeIcon icon={faClock} />
+            <span>Auto-refreshes every 30s</span>
+            <button 
+              onClick={fetchInvestments} 
+              disabled={investmentsLoading}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)' }}
+            >
+              <FontAwesomeIcon icon={faSync} spin={investmentsLoading} />
+            </button>
+          </div>
+        </div>
+
+        {investmentsError && (
+          <div style={{ padding: '15px', background: 'rgba(231, 76, 60, 0.1)', borderRadius: '8px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <FontAwesomeIcon icon={faExclamationTriangle} style={{ color: '#e74c3c' }} />
+            <span style={{ color: '#e74c3c' }}>{investmentsError} - showing cached data</span>
+          </div>
+        )}
+
+        <div className="wallet-section" style={{ flexWrap: 'wrap', gap: '20px' }}>
+          {investments.map((inv) => {
+            const totalPrincipal = (inv.principalReturned || 0) + (inv.remainingPrincipal || 0);
+            const availableToWithdraw = inv.remainingPrincipal || 0;
+            const isProcessingWithdraw = false; // Could track per-card loading state
+
+            return (
+              <div 
+                key={inv.packageId || inv.packageName} 
+                className="wallet-card" 
+                style={{ 
+                  minWidth: '260px', 
+                  flex: '1 1 calc(33.333% - 20px)',
+                  position: 'relative',
+                  borderLeft: inv.status === 'completed' ? '4px solid #00d4aa' : '4px solid #f1c40f',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                  <h3 style={{ margin: 0 }}>
+                    <FontAwesomeIcon icon={faBox} /> {inv.packageName}
+                  </h3>
+                  <span style={{ 
+                    fontSize: '11px', 
+                    padding: '2px 8px', 
+                    borderRadius: '10px',
+                    background: inv.status === 'completed' ? 'rgba(0, 212, 170, 0.2)' : 'rgba(241, 196, 15, 0.2)',
+                    color: inv.status === 'completed' ? '#00d4aa' : '#f1c40f',
+                  }}>
+                    {inv.status}
+                  </span>
+                </div>
+
+                <div className="amount">{formatUGX(totalPrincipal)}</div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '5px' }}>
+                  Total Principal Invested
+                </p>
+
+                <div style={{ marginTop: '15px', padding: '12px', background: 'var(--secondary)', borderRadius: '8px', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Interest Earned:</span>
+                    <span style={{ fontWeight: '600', color: '#9b59b6' }}>{formatUGX(inv.interestReturned || 0)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Principal Returned:</span>
+                    <span style={{ fontWeight: '600', color: 'var(--success)' }}>{formatUGX(inv.principalReturned || 0)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Remaining Principal:</span>
+                    <span style={{ fontWeight: '600', color: availableToWithdraw > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                      {formatUGX(inv.remainingPrincipal || 0)}
+                    </span>
+                  </div>
+                </div>
+
+                {availableToWithdraw > 0 && (
+                  <div style={{ marginTop: '12px' }}>
+                    <button
+                      onClick={() => handlePackageWithdraw(inv)}
+                      disabled={isProcessing}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        background: 'linear-gradient(135deg, #00d4aa 0%, #00a080 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        transition: 'all 0.3s ease',
+                      }}
+                      onMouseOver={(e) => e.target.style.transform = 'translateY(-1px)'}
+                      onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+                    >
+                      <FontAwesomeIcon icon={faMoneyBillWave} />
+                      Withdraw from Package
+                    </button>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', textAlign: 'center' }}>
+                      Fee: UGX 1,000 (deducted from withdrawal amount)
+                    </p>
+                  </div>
+                )}
+
+                {availableToWithdraw <= 0 && inv.status === 'completed' && (
+                  <div style={{ 
+                    marginTop: '12px', 
+                    padding: '10px', 
+                    background: 'rgba(0, 212, 170, 0.1)', 
+                    borderRadius: '6px', 
+                    textAlign: 'center',
+                    fontSize: '13px',
+                    color: 'var(--success)',
+                    fontWeight: '600'
+                  }}>
+                    Fully Withdrawn
+                  </div>
+                )}
+
+                {lastRefresh && (
+                  <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right' }}>
+                    Updated: {lastRefresh.toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Wallet Transactions */}
+      <div className="card" style={{ marginTop: '20px' }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <h2>Wallet Transactions</h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -326,6 +636,7 @@ export default function Wallet() {
         </div>
       </div>
 
+      {/* Deposit Modal */}
       {showDepositModal && (
         <div className="modal-overlay" onClick={() => setShowDepositModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -357,6 +668,7 @@ export default function Wallet() {
         </div>
       )}
 
+{/* Withdraw Modal */}
       {showWithdrawModal && (
         <div className="modal-overlay" onClick={closeWithdrawModal}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
@@ -425,14 +737,14 @@ export default function Wallet() {
                   <label>Recipient Phone Number</label>
                   <div style={{ position: 'relative' }}>
                     <FontAwesomeIcon icon={faPhone} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input type="tel" value={phoneNumber} onChange={(e) => { setPhoneNumber(e.target.value); clearErrors(); }} placeholder="e.g., 0771234567" style={{ paddingLeft: '40px' }} required />
+                    <input type="tel" value={phoneNumber} onChange={e => { setPhoneNumber(e.target.value); clearErrors(); }} placeholder="e.g., 0771234567" style={{ paddingLeft: '40px' }} required />
                   </div>
                   {errors.phone && <span style={{ color: 'var(--danger)', fontSize: '12px' }}>{errors.phone}</span>}
                 </div>
 
                 <div className="form-group">
                   <label>Amount (min: UGX 1,000)</label>
-                  <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); clearErrors(); }} placeholder="Enter amount" required />
+                  <input type="number" value={amount} onChange={e => { setAmount(e.target.value); clearErrors(); }} placeholder="Enter amount" required />
                   {errors.amount && <span style={{ color: 'var(--danger)', fontSize: '12px' }}>{errors.amount}</span>}
                 </div>
 
@@ -478,13 +790,188 @@ export default function Wallet() {
 
                 <div className="form-group">
                   <label>Description (Optional)</label>
-                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Add a note" />
+                  <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Add a note" />
                 </div>
 
                 <div className="modal-actions">
                   <button type="button" className="btn btn-secondary" onClick={closeWithdrawModal}>Cancel</button>
                   <button type="submit" className="btn btn-danger" disabled={isProcessing}>
                     {isProcessing ? 'Processing...' : 'Withdraw to Mobile Money'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Package Withdraw Modal */}
+      {showPackageWithdrawModal && selectedPackage && (
+        <div className="modal-overlay" onClick={closePackageWithdrawModal}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <h2>
+              <FontAwesomeIcon icon={faMoneyBillWave} style={{ marginRight: '10px', color: '#00d4aa' }} />
+              Withdraw from {selectedPackage.packageName}
+            </h2>
+            
+            {packageWithdrawResult && (
+              <div style={{ 
+                padding: '15px', 
+                borderRadius: '8px', 
+                marginBottom: '20px',
+                background: packageWithdrawResult.success ? 'rgba(0, 212, 170, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                border: `1px solid ${packageWithdrawResult.success ? '#00d4aa' : '#e74c3c'}`
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <FontAwesomeIcon 
+                    icon={packageWithdrawResult.success ? faCheckCircle : faTimesCircle} 
+                    style={{ color: packageWithdrawResult.success ? '#00d4aa' : '#e74c3c' }} 
+                  />
+                  <strong style={{ color: packageWithdrawResult.success ? '#00d4aa' : '#e74c3c' }}>
+                    {packageWithdrawResult.success ? 'Success!' : 'Failed'}
+                  </strong>
+                </div>
+                <p style={{ margin: '0', fontSize: '14px' }}>{packageWithdrawResult.message}</p>
+                {packageWithdrawResult.success && packageWithdrawResult.withdrawn && (
+                  <div style={{ marginTop: '10px', fontSize: '14px' }}>
+                    <div>Withdrawn: {formatUGX(packageWithdrawResult.withdrawn)}</div>
+                    <div>Fee ({feePercent}%): {formatUGX(packageWithdrawResult.fee)}</div>
+                    <div style={{ fontWeight: 'bold', color: '#00d4aa' }}>
+                      {packageWithdrawResult.phoneNumber ? 'Net Sent to Phone' : 'Net Credited'}: {formatUGX(packageWithdrawResult.netAmount)}
+                    </div>
+                    {packageWithdrawResult.phoneNumber && (
+                      <div style={{ marginTop: '5px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        Sent to {packageWithdrawResult.provider}: {packageWithdrawResult.phoneNumber}
+                      </div>
+                    )}
+                    {packageWithdrawResult.reference && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Reference: {packageWithdrawResult.reference}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ marginTop: '15px' }}
+                  onClick={closePackageWithdrawModal}
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {!packageWithdrawResult && (
+              <form onSubmit={handlePackageWithdrawSubmit}>
+                <div style={{ 
+                  padding: '15px', 
+                  background: 'var(--secondary)', 
+                  borderRadius: '8px', 
+                  marginBottom: '20px',
+                  fontSize: '14px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Available to Withdraw:</span>
+                    <span style={{ fontWeight: '600', color: '#00d4aa' }}>
+                      {formatUGX(selectedPackage.remainingPrincipal)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Interest Earned:</span>
+                    <span style={{ fontWeight: '600', color: '#9b59b6' }}>
+                      {formatUGX(selectedPackage.interestReturned)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Mobile Money Provider</label>
+                  <select 
+                    value={packageWithdrawProvider} 
+                    onChange={(e) => setPackageWithdrawProvider(e.target.value)}
+                  >
+                    <option value="MTN">MTN Mobile Money</option>
+                    <option value="AIRTEL">Airtel Money</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Phone Number (for withdrawal to mobile money)</label>
+                  <div style={{ position: 'relative' }}>
+                    <FontAwesomeIcon icon={faPhone} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input 
+                      type="tel" 
+                      value={packageWithdrawPhone} 
+                      onChange={(e) => setPackageWithdrawPhone(e.target.value)} 
+                      placeholder="e.g., 0771234567"
+                      style={{ paddingLeft: '40px' }}
+                    />
+                  </div>
+                  <small style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                    Leave empty to credit to Main Wallet instead
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label>Amount to Withdraw (min: UGX 1,000)</label>
+                  <input 
+                    type="number" 
+                    value={packageWithdrawAmount} 
+                    onChange={(e) => setPackageWithdrawAmount(e.target.value)} 
+                    placeholder={`Max: ${selectedPackage.remainingPrincipal}`}
+                    required
+                  />
+                  {packageWithdrawAmount && parseFloat(packageWithdrawAmount) > 0 && (
+                    <div style={{ 
+                      marginTop: '10px', 
+                      padding: '12px', 
+                      background: 'rgba(241, 196, 15, 0.1)', 
+                      borderRadius: '6px',
+                      fontSize: '13px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Withdrawal Amount:</span>
+                        <span style={{ fontWeight: '600' }}>{formatUGX(parseFloat(packageWithdrawAmount))}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Platform Fee ({feePercent}%):</span>
+                        <span style={{ fontWeight: '600', color: '#e74c3c' }}>
+                          -{formatUGX(Math.floor(parseFloat(packageWithdrawAmount) * (feePercent / 100)))}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: '6px' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Net to Receive:</span>
+                        <span style={{ fontWeight: '700', color: '#00d4aa', fontSize: '16px' }}>
+                          {formatUGX(parseFloat(packageWithdrawAmount) - Math.floor(parseFloat(packageWithdrawAmount) * (feePercent / 100)))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ 
+                  padding: '12px', 
+                  background: packageWithdrawPhone ? 'rgba(231, 76, 60, 0.1)' : 'rgba(0, 212, 170, 0.1)', 
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: 'var(--text-muted)',
+                  marginBottom: '15px'
+                }}>
+                  <FontAwesomeIcon icon={faInfoCircle} style={{ marginRight: '5px' }} />
+                  {packageWithdrawPhone 
+                    ? `Funds will be sent to ${packageWithdrawProvider} at ${packageWithdrawPhone}`
+                    : 'Funds will be credited to your Main Wallet after fee deduction'
+                  }
+                </div>
+
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={closePackageWithdrawModal}>Cancel</button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-danger"
+                    disabled={isProcessing || !packageWithdrawAmount || parseFloat(packageWithdrawAmount) < 1000 || parseFloat(packageWithdrawAmount) > selectedPackage.remainingPrincipal}
+                  >
+                    {isProcessing ? 'Processing...' : (packageWithdrawPhone ? 'Withdraw to Mobile Money' : 'Withdraw to Main Wallet')}
                   </button>
                 </div>
               </form>

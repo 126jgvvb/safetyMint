@@ -595,48 +595,57 @@ export function AppProvider({ children }) {
     }
   };
 
-  const signup = async (data) => {
-    try {
-      const result = await firebaseService.registerWithEmail(data.email, data.password, data.name, data.phone);
-      if (result.success) {
-        setUser(result.user);
-        setIsAuthenticated(true);
+   const signup = async (data) => {
+     try {
+       const result = await firebaseService.registerWithEmail(data.email, data.password, data.name, data.phone);
+       if (result.success) {
+         setUser(result.user);
+         setIsAuthenticated(true);
 
-        // Try to sync with backend
-        try {
-          const backendResult = await api.signup({
-            ...data,
-            firebaseUid: result.user.uid
-          });
-          setWallet(backendResult.wallet);
-        } catch (backendError) {
-          console.log('Backend signup failed, continuing with Firebase auth');
-          setWallet({ main: 0, interest: 0 });
-        }
+         // Track signup event
+         sessionService.trackAction('signup', { email: data.email });
 
-        return result;
-      }
-      return result;
-    } catch (error) {
-      console.error('Signup error:', error);
-      throw error;
-    }
-  };
+         // Try to sync with backend
+         try {
+           const backendResult = await api.signup({
+             ...data,
+             firebaseUid: result.user.uid
+           });
+           setWallet(backendResult.wallet);
+         } catch (backendError) {
+           console.log('Backend signup failed, continuing with Firebase auth');
+           setWallet({ main: 0, interest: 0 });
+         }
 
-  return (
-    <AppContext.Provider value={{
-      user, setUser, updateUser,
-      isAuthenticated, login, loginWithGoogle, logout,
-      theme, setTheme, toggleTheme,
-      packages, addPackage, updatePackage, deletePackage, toggleFreezePackage,
-      wallet, platformWallet, setPlatformWallet, depositToWallet, withdrawFromWallet, withdrawToPhone, allocateToPackage,
-      transactions, addTransaction, processRepayment, processReserveDeduction, updatePackageInterests,
-      walletTransactions, loading, useApi, signup
-    }}>
-      {children}
-    </AppContext.Provider>
-  );
-}
+         return result;
+       }
+       return result;
+     } catch (error) {
+       console.error('Signup error:', error);
+       throw error;
+     }
+   };
+
+   return (
+     <AppContext.Provider value={{
+       user, setUser, updateUser,
+       isAuthenticated, login, loginWithGoogle, logout,
+       theme, setTheme, toggleTheme,
+       packages, addPackage, updatePackage, deletePackage, toggleFreezePackage,
+       wallet, platformWallet, setPlatformWallet, depositToWallet, withdrawFromWallet, withdrawToPhone, allocateToPackage,
+       transactions, addTransaction, processRepayment, processReserveDeduction, updatePackageInterests,
+       walletTransactions, loading, useApi, signup,
+       // Session tracking
+       sessionMetrics: sessionService.getSessionMetrics(),
+       trackPageView: (page) => sessionService.trackPageView(page),
+       trackAction: (action, data) => sessionService.trackAction(action, data),
+       trackCustomEvent: (eventName, props) => sessionService.trackCustomEvent(eventName, props),
+       getTrackingSummary: () => sessionService.getTrackingSummary(),
+     }}>
+       {children}
+     </AppContext.Provider>
+   );
+ }
 
 export function useApp() {
   return useContext(AppContext);

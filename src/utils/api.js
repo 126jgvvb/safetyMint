@@ -556,20 +556,48 @@ export const api = {
     }
   },
 
-  // Collections
-  getCollections: async () => {
-    try {
-      const response = await fetch(`${API_BASE}/collections`, {
-        headers: getAuthHeaders()
-      });
-      return handleResponse(response);
-    } catch (error) {
-      console.error('Failed to fetch collections:', error);
-      return [];
-    }
-  },
+   // Collections
+   getCollections: async () => {
+     try {
+       const response = await fetch(`${API_BASE}/collections`, {
+         headers: getAuthHeaders()
+       });
+       return handleResponse(response);
+     } catch (error) {
+       console.error('Failed to fetch collections:', error);
+       return [];
+     }
+   },
 
-  getOverdueCollections: async () => {
+   // Wallet Investments (per-package principal & interest)
+   getInvestments: async () => {
+     try {
+       const response = await fetch(`${API_BASE}/wallet/investments`, {
+         headers: getAuthHeaders()
+       });
+       return handleResponse(response);
+     } catch (error) {
+       console.error('Failed to fetch investments:', error);
+       return [];
+     }
+   },
+
+   // Withdraw from a specific package
+   withdrawFromPackage: async (packageId, amount, phoneNumber, provider, description) => {
+     try {
+       const response = await fetch(`${API_BASE}/wallet/withdraw/package`, {
+         method: 'POST',
+         headers: getAuthHeaders(),
+         body: JSON.stringify({ packageId, amount, phoneNumber, provider, description }),
+       });
+       return handleResponse(response);
+     } catch (error) {
+       console.error('Failed to withdraw from package:', error);
+       return null;
+     }
+   },
+
+   getOverdueCollections: async () => {
     try {
       const response = await fetch(`${API_BASE}/collections/overdue`, {
         headers: getAuthHeaders()

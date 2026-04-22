@@ -1,19 +1,26 @@
-import { useState, useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHome, faWallet, faBox, faChartLine, faSignOutAlt, faList, faArrowUp, faArrowDown, faMoon, faSun, faEdit, faBell, faMoneyBillWave, faCoins, faFileInvoice, faPercent } from '@fortawesome/free-solid-svg-icons';
-import { useApp } from '../context/AppContext';
+ import { useState, useEffect } from 'react';
+ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+ import { faHome, faWallet, faBox, faChartLine, faSignOutAlt, faList, faArrowUp, faArrowDown, faMoon, faSun, faEdit, faBell, faMoneyBillWave, faCoins, faFileInvoice, faPercent } from '@fortawesome/free-solid-svg-icons';
+ import { useApp } from '../context/AppContext';
+ import { sessionService } from '../services/session';
+ import SessionTimer from './SessionTimer';
 
-export default function DashboardLayout() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { wallet, user, theme, toggleTheme, updateUser } = useApp();
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileData, setProfileData] = useState({ name: '', email: '' });
-  
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+ export default function DashboardLayout() {
+   const navigate = useNavigate();
+   const location = useLocation();
+   const { wallet, user, theme, toggleTheme, updateUser } = useApp();
+   const [showProfileModal, setShowProfileModal] = useState(false);
+   const [profileData, setProfileData] = useState({ name: '', email: '' });
+
+   useEffect(() => {
+     document.documentElement.setAttribute('data-theme', theme);
+   }, [theme]);
+
+   // Track page views
+   useEffect(() => {
+     sessionService.trackPageView(location.pathname);
+   }, [location.pathname]);
 
   const formatUGX = (amount) => {
     return `UGX ${amount.toLocaleString()}`;
@@ -114,38 +121,41 @@ export default function DashboardLayout() {
             </button>
           </div>
         </div>
-        <Outlet />
-      </main>
+         <Outlet />
+       </main>
 
-      {showProfileModal && (
-        <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h2>Edit Profile</h2>
-            <div className="form-group">
-              <label>Name</label>
-              <input 
-                type="text" 
-                value={profileData.name} 
-                onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                placeholder="Enter your name"
-              />
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input 
-                type="email" 
-                value={profileData.email} 
-                onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                placeholder="Enter your email"
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowProfileModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleProfileUpdate}>Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+       {showProfileModal && (
+         <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
+           <div className="modal" onClick={e => e.stopPropagation()}>
+             <h2>Edit Profile</h2>
+             <div className="form-group">
+               <label>Name</label>
+               <input 
+                 type="text" 
+                 value={profileData.name} 
+                 onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                 placeholder="Enter your name"
+               />
+             </div>
+             <div className="form-group">
+               <label>Email</label>
+               <input 
+                 type="email" 
+                 value={profileData.email} 
+                 onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                 placeholder="Enter your email"
+               />
+             </div>
+             <div className="modal-actions">
+               <button className="btn btn-secondary" onClick={() => setShowProfileModal(false)}>Cancel</button>
+               <button className="btn btn-primary" onClick={handleProfileUpdate}>Save</button>
+             </div>
+           </div>
+         </div>
+       )}
+
+       {/* Session Timer Warning Modal */}
+       <SessionTimer />
+     </div>
+   );
+ }
