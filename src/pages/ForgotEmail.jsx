@@ -2,18 +2,27 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPhone } from '@fortawesome/free-solid-svg-icons';
+import { api } from '../utils/api';
 
 export default function ForgotEmail() {
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!phone) {
       setMessage('Please enter your phone number');
       return;
     }
-    setMessage('Your email address will be sent to your phone');
+    setLoading(true);
+    try {
+      const result = await api.recoverEmail(phone);
+      setMessage(result.message);
+    } catch (error) {
+      setMessage('Failed to recover email. Please try again.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -38,7 +47,9 @@ export default function ForgotEmail() {
               />
             </div>
           </div>
-          <button type="submit" className="btn btn-primary btn-block">Recover Email</button>
+          <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
+              {loading ? 'Recovering...' : 'Recover Email'}
+            </button>
         </form>
         <div className="auth-footer">
           <p><Link to="/login">Back to Sign In</Link></p>

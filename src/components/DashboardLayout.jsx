@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHome, faWallet, faExchangeAlt, faBox, faChartLine, faSignOutAlt, faList, faArrowUp, faArrowDown, faMoon, faSun, faEdit } from '@fortawesome/free-solid-svg-icons';
+import { faHome, faWallet, faBox, faChartLine, faSignOutAlt, faList, faArrowUp, faArrowDown, faMoon, faSun, faEdit, faBell, faMoneyBillWave, faCoins, faFileInvoice, faPercent } from '@fortawesome/free-solid-svg-icons';
 import { useApp } from '../context/AppContext';
 
 export default function DashboardLayout() {
@@ -22,10 +22,14 @@ export default function DashboardLayout() {
   const navItems = [
     { path: '/dashboard', icon: faHome, label: 'Dashboard' },
     { path: '/dashboard/packages', icon: faBox, label: 'Loan Packages' },
+    { path: '/dashboard/package-payouts', icon: faMoneyBillWave, label: 'Payouts' },
+    { path: '/dashboard/payment-requests', icon: faFileInvoice, label: 'Requests' },
     { path: '/dashboard/wallet', icon: faWallet, label: 'Wallet' },
-    { path: '/dashboard/transactions', icon: faExchangeAlt, label: 'Transactions' },
+    { path: '/dashboard/collections', icon: faCoins, label: 'Collections' },
     { path: '/dashboard/withdraw-list', icon: faList, label: 'Withdraw List' },
     { path: '/dashboard/performance', icon: faChartLine, label: 'Performance' },
+    { path: '/dashboard/interest-growth', icon: faPercent, label: 'Interest' },
+    { path: '/dashboard/notifications', icon: faBell, label: 'Notifications' },
   ];
 
   const handleLogout = () => {

@@ -2,18 +2,27 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope } from '@fortawesome/free-solid-svg-icons';
+import firebaseService from '../services/firebase';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email) {
       setMessage('Please enter your email address');
       return;
     }
-    setMessage('Password reset link sent to your email');
+    setLoading(true);
+    try {
+      const result = await firebaseService.resetPassword(email);
+      setMessage(result.message);
+    } catch (error) {
+      setMessage('Failed to send reset email. Please try again.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -38,7 +47,9 @@ export default function ForgotPassword() {
               />
             </div>
           </div>
-          <button type="submit" className="btn btn-primary btn-block">Send Reset Link</button>
+          <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
+              {loading ? 'Sending...' : 'Send Reset Link'}
+            </button>
         </form>
         <div className="auth-footer">
           <p><Link to="/login">Back to Sign In</Link></p>

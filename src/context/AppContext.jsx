@@ -9,6 +9,8 @@ const initialPackages = [
   {
     id: 1,
     name: 'Starter Loan',
+    ownerName: 'QuickFinance Ltd',
+    ownerPhone: '+1234567890',
     interestRate: 5,
     cycle: 'monthly',
     minAmount: 1000,
@@ -17,10 +19,21 @@ const initialPackages = [
     status: 'active',
     currentAmount: 5000,
     monthlyPayout: [1000, 1500, 2000, 1500],
+    successfulPayouts: 3,
+    failedPayouts: 1,
+    revokedPayouts: 0,
+    amountDeducted: 5000,
+    amountDeductedAt: '2026-03-01T10:00:00Z',
+    amountReturnedForcefully: 0,
+    amountReturnedSuccessfully: 5250,
+    interestObtained: 250,
+    interestsRemaining: 0,
   },
   {
     id: 2,
     name: 'Business Loan',
+    ownerName: 'Enterprise Solutions',
+    ownerPhone: '+1234567891',
     interestRate: 8,
     cycle: 'monthly',
     minAmount: 10000,
@@ -29,10 +42,21 @@ const initialPackages = [
     status: 'active',
     currentAmount: 25000,
     monthlyPayout: [8000, 9000, 8000],
+    successfulPayouts: 2,
+    failedPayouts: 0,
+    revokedPayouts: 1,
+    amountDeducted: 10000,
+    amountDeductedAt: '2026-03-15T14:00:00Z',
+    amountReturnedForcefully: 0,
+    amountReturnedSuccessfully: 5400,
+    interestObtained: 400,
+    interestsRemaining: 400,
   },
   {
     id: 3,
     name: 'Premium Loan',
+    ownerName: 'Capital Partners',
+    ownerPhone: '+1234567892',
     interestRate: 12,
     cycle: 'monthly',
     minAmount: 50000,
@@ -41,6 +65,15 @@ const initialPackages = [
     status: 'frozen',
     currentAmount: 80000,
     monthlyPayout: [20000, 25000, 35000],
+    successfulPayouts: 5,
+    failedPayouts: 2,
+    revokedPayouts: 1,
+    amountDeducted: 75000,
+    amountDeductedAt: '2026-02-20T09:00:00Z',
+    amountReturnedForcefully: 7500,
+    amountReturnedSuccessfully: 0,
+    interestObtained: 0,
+    interestsRemaining: 9000,
   }
 ];
 
@@ -49,42 +82,69 @@ const initialWallet = {
   interest: 2500,
 };
 
+const initialPlatformWallet = {
+  balance: 0,
+  totalFees: 0,
+  feePercentage: 5,
+};
+
 const initialTransactions = [
   {
     id: 1,
     memberName: 'John Smith',
     phoneNumber: '+1234567890',
     groupName: 'Group Alpha',
+    groupId: 1,
+    groupAdminName: 'Alice Johnson',
+    groupAdminPhone: '+1234567899',
     amountPaid: 5000,
     date: '2026-03-01',
     interestRate: 5,
     amountToReturn: 5250,
     dateOfReturn: '2026-04-01',
     status: 'paid',
+    packageId: 1,
+    packageName: 'Starter Loan',
+    payoutId: 1,
+    defaultingCountdown: 0,
   },
   {
     id: 2,
     memberName: 'Sarah Johnson',
     phoneNumber: '+1234567891',
     groupName: 'Group Beta',
+    groupId: 2,
+    groupAdminName: 'Bob Williams',
+    groupAdminPhone: '+1234567898',
     amountPaid: 10000,
     date: '2026-03-15',
     interestRate: 8,
     amountToReturn: 10800,
     dateOfReturn: '2026-04-15',
     status: 'pending',
+    packageId: 2,
+    packageName: 'Business Loan',
+    payoutId: 2,
+    defaultingCountdown: 5,
   },
   {
     id: 3,
     memberName: 'Mike Brown',
     phoneNumber: '+1234567892',
     groupName: 'Group Alpha',
+    groupId: 1,
+    groupAdminName: 'Alice Johnson',
+    groupAdminPhone: '+1234567899',
     amountPaid: 7500,
     date: '2026-02-20',
     interestRate: 5,
     amountToReturn: 7875,
     dateOfReturn: '2026-03-20',
     status: 'overdue',
+    packageId: 1,
+    packageName: 'Starter Loan',
+    payoutId: 3,
+    defaultingCountdown: -31,
   }
 ];
 
@@ -101,6 +161,7 @@ export function AppProvider({ children }) {
   const [theme, setTheme] = useState('dark');
   const [packages, setPackages] = useState(initialPackages);
   const [wallet, setWallet] = useState(initialWallet);
+  const [platformWallet, setPlatformWallet] = useState(initialPlatformWallet);
   const [transactions, setTransactions] = useState(initialTransactions);
   const [walletTransactions, setWalletTransactions] = useState(initialWalletTransactions);
   const [loading, setLoading] = useState(true);
@@ -257,12 +318,86 @@ export function AppProvider({ children }) {
     }
   };
 
+  const withdrawToPhone = async (amount, description, walletType = 'main', phoneNumber = '', provider = 'MTN') => {
+    const feePercentage = 5;
+    const fee = Math.floor(amount * (feePercentage / 100));
+    const netAmount = amount - fee;
+
+    if (useApi) {
+      try {
+        const result = await api.withdrawToPhone(amount, description, phoneNumber, provider, walletType);
+        if (result) {
+          const txns = await api.getWalletTransactions();
+          setWalletTransactions(txns);
+          const platformData = await api.getPlatformWallet();
+          setPlatformWallet(platformData);
+          return result;
+        }
+        return null;
+      } catch (error) {
+        console.error('Failed to withdraw to phone:', error);
+        return null;
+      }
+    } else {
+      if (walletType === 'main' && wallet.main >= amount) {
+        setWallet({ ...wallet, main: wallet.main - netAmount });
+        setPlatformWallet({ 
+          ...platformWallet, 
+          balance: platformWallet.balance + fee, 
+          totalFees: platformWallet.totalFees + fee 
+        });
+        const newTransaction = {
+          id: Date.now(),
+          type: 'withdraw',
+          amount: netAmount,
+          fee,
+          netAmount,
+          date: new Date().toISOString().split('T')[0],
+          description,
+          walletType,
+          phoneNumber,
+          provider,
+        };
+        setWalletTransactions([...walletTransactions, newTransaction]);
+        return newTransaction;
+      } else if (walletType === 'interest' && wallet.interest >= amount) {
+        setWallet({ ...wallet, interest: wallet.interest - netAmount });
+        setPlatformWallet({ 
+          ...platformWallet, 
+          balance: platformWallet.balance + fee, 
+          totalFees: platformWallet.totalFees + fee 
+        });
+        const newTransaction = {
+          id: Date.now(),
+          type: 'withdraw',
+          amount: netAmount,
+          fee,
+          netAmount,
+          date: new Date().toISOString().split('T')[0],
+          description,
+          walletType,
+          phoneNumber,
+          provider,
+        };
+        setWalletTransactions([...walletTransactions, newTransaction]);
+        return newTransaction;
+      }
+      return null;
+    }
+  };
+
   const withdrawFromWallet = async (amount, description, walletType = 'main') => {
+    const feePercentage = 5;
+    const fee = Math.floor(amount * (feePercentage / 100));
+    const netAmount = amount - fee;
+
     if (useApi) {
       try {
         const result = await api.withdrawFromWallet(amount, description, walletType);
         if (result) {
           setWallet(result);
+          const platformData = await api.getPlatformWallet();
+          setPlatformWallet(platformData);
           const txns = await api.getWalletTransactions();
           setWalletTransactions(txns);
           return true;
@@ -275,14 +410,42 @@ export function AppProvider({ children }) {
     } else {
       if (walletType === 'main') {
         if (wallet.main >= amount) {
-          setWallet({ ...wallet, main: wallet.main - amount });
-          setWalletTransactions([...walletTransactions, { id: Date.now(), type: 'withdraw', amount, date: new Date().toISOString().split('T')[0], description, walletType }]);
+          setWallet({ ...wallet, main: wallet.main - netAmount });
+          setPlatformWallet({ 
+            ...platformWallet, 
+            balance: platformWallet.balance + fee, 
+            totalFees: platformWallet.totalFees + fee 
+          });
+          setWalletTransactions([...walletTransactions, { 
+            id: Date.now(), 
+            type: 'withdraw', 
+            amount: netAmount, 
+            fee,
+            netAmount,
+            date: new Date().toISOString().split('T')[0], 
+            description, 
+            walletType 
+          }]);
           return true;
         }
       } else {
         if (wallet.interest >= amount) {
-          setWallet({ ...wallet, interest: wallet.interest - amount });
-          setWalletTransactions([...walletTransactions, { id: Date.now(), type: 'withdraw', amount, date: new Date().toISOString().split('T')[0], description, walletType }]);
+          setWallet({ ...wallet, interest: wallet.interest - netAmount });
+          setPlatformWallet({ 
+            ...platformWallet, 
+            balance: platformWallet.balance + fee, 
+            totalFees: platformWallet.totalFees + fee 
+          });
+          setWalletTransactions([...walletTransactions, { 
+            id: Date.now(), 
+            type: 'withdraw', 
+            amount: netAmount,
+            fee,
+            netAmount,
+            date: new Date().toISOString().split('T')[0], 
+            description, 
+            walletType 
+          }]);
           return true;
         }
       }
@@ -354,6 +517,20 @@ export function AppProvider({ children }) {
 
   const updateTransactionStatus = (id, status) => {
     setTransactions(transactions.map(t => t.id === id ? { ...t, status } : t));
+  };
+
+  const updatePackageInterests = (packageId, interestObtained, remainingAmount) => {
+    setPackages(packages.map(pkg => {
+      if (pkg.id === packageId) {
+        return {
+          ...pkg,
+          interestObtained: pkg.interestObtained + interestObtained,
+          interestsRemaining: remainingAmount,
+          amountReturnedSuccessfully: pkg.amountReturnedSuccessfully + interestObtained + (pkg.amountDeducted - (pkg.amountReturnedSuccessfully + pkg.amountReturnedForcefully)),
+        };
+      }
+      return pkg;
+    }));
   };
 
   const login = async (credentials, rememberMe = false) => {
@@ -452,8 +629,8 @@ export function AppProvider({ children }) {
       isAuthenticated, login, loginWithGoogle, logout,
       theme, setTheme, toggleTheme,
       packages, addPackage, updatePackage, deletePackage, toggleFreezePackage,
-      wallet, depositToWallet, withdrawFromWallet, allocateToPackage,
-      transactions, addTransaction, processRepayment, processReserveDeduction,
+      wallet, platformWallet, setPlatformWallet, depositToWallet, withdrawFromWallet, withdrawToPhone, allocateToPackage,
+      transactions, addTransaction, processRepayment, processReserveDeduction, updatePackageInterests,
       walletTransactions, loading, useApi, signup
     }}>
       {children}

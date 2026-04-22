@@ -7,10 +7,14 @@ import ForgotEmail from './pages/ForgotEmail';
 import DashboardLayout from './components/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import Packages from './pages/Packages';
+import PackagePayouts from './pages/PackagePayouts';
 import Wallet from './pages/Wallet';
-import Transactions from './pages/Transactions';
 import WithdrawList from './pages/WithdrawList';
 import Performance from './pages/Performance';
+import NotificationCenter from './pages/NotificationCenter';
+import CollectionCenter from './pages/CollectionCenter';
+import PaymentRequests from './pages/PaymentRequests';
+import InterestGrowth from './pages/InterestGrowth';
 
 function App() {
   return (
@@ -25,10 +29,14 @@ function App() {
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="packages" element={<Packages />} />
+            <Route path="package-payouts" element={<PackagePayouts />} />
+            <Route path="payment-requests" element={<PaymentRequests />} />
             <Route path="wallet" element={<Wallet />} />
-            <Route path="transactions" element={<Transactions />} />
+            <Route path="collections" element={<CollectionCenter />} />
             <Route path="withdraw-list" element={<WithdrawList />} />
             <Route path="performance" element={<Performance />} />
+            <Route path="notifications" element={<NotificationCenter />} />
+            <Route path="interest-growth" element={<InterestGrowth />} />
           </Route>
         </Routes>
       </BrowserRouter>

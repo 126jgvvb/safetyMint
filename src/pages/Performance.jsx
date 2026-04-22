@@ -1,17 +1,30 @@
+import { useState, useEffect } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChartLine, faChartBar } from '@fortawesome/free-solid-svg-icons';
 import { useApp } from '../context/AppContext';
+import { api } from '../utils/api';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
 const formatUGX = (amount) => `UGX ${amount.toLocaleString()}`;
 
 export default function Performance() {
-  const { packages, transactions } = useApp();
+  const { packages, transactions, useApi } = useApp();
+  const [analyticsData, setAnalyticsData] = useState(null);
 
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+
+  useEffect(() => {
+    if (useApi) {
+      api.getAnalytics().then(data => {
+        if (data) {
+          setAnalyticsData(data);
+        }
+      });
+    }
+  }, [useApi]);
 
   const generateMonthlyData = () => {
     const colors = ['#00d4aa', '#3498db', '#9b59b6', '#e74c3c', '#f39c12'];
@@ -21,7 +34,7 @@ export default function Performance() {
         label: pkg.name,
         data: pkg.monthlyPayout.length > 0 
           ? pkg.monthlyPayout 
-          : Array(6).fill(0).map(() => Math.floor(Math.random() * 20000) + 5000),
+          : Array(6).fill(0),
         borderColor: colors[index % colors.length],
         backgroundColor: `${colors[index % colors.length]}33`,
         tension: 0.4,
@@ -30,35 +43,65 @@ export default function Performance() {
     };
   };
 
-  const overallPerformanceData = {
-    labels: months,
-    datasets: [
-      {
-        label: 'Total Payouts',
-        data: [12000, 19000, 25000, 22000, 28000, 35000],
-        borderColor: '#00d4aa',
-        backgroundColor: 'rgba(0, 212, 170, 0.1)',
-        tension: 0.4,
-        fill: true,
-      },
-      {
-        label: 'Total Returns',
-        data: [10000, 15000, 21000, 18000, 24000, 30000],
-        borderColor: '#3498db',
-        backgroundColor: 'rgba(52, 152, 219, 0.1)',
-        tension: 0.4,
-        fill: true,
-      },
-      {
-        label: 'Interest Earned',
-        data: [2000, 4000, 4000, 4000, 4000, 5000],
-        borderColor: '#9b59b6',
-        backgroundColor: 'rgba(155, 89, 182, 0.1)',
-        tension: 0.4,
-        fill: true,
-      },
-    ],
-  };
+  const overallPerformanceData = analyticsData?.monthlyPerformance
+    ? {
+        labels: analyticsData.monthlyPerformance.labels,
+        datasets: [
+          {
+            label: 'Total Payouts',
+            data: analyticsData.monthlyPerformance.payouts,
+            borderColor: '#00d4aa',
+            backgroundColor: 'rgba(0, 212, 170, 0.1)',
+            tension: 0.4,
+            fill: true,
+          },
+          {
+            label: 'Total Returns',
+            data: analyticsData.monthlyPerformance.returns,
+            borderColor: '#3498db',
+            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+            tension: 0.4,
+            fill: true,
+          },
+          {
+            label: 'Interest Earned',
+            data: analyticsData.monthlyPerformance.interestEarned,
+            borderColor: '#9b59b6',
+            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+            tension: 0.4,
+            fill: true,
+          },
+        ],
+      }
+    : {
+        labels: months,
+        datasets: [
+          {
+            label: 'Total Payouts',
+            data: transactions.reduce((sum, t) => [...sum, t.amountPaid], [12000, 19000, 25000, 22000, 28000, 35000].slice(transactions.length)),
+            borderColor: '#00d4aa',
+            backgroundColor: 'rgba(0, 212, 170, 0.1)',
+            tension: 0.4,
+            fill: true,
+          },
+          {
+            label: 'Total Returns',
+            data: transactions.filter(t => t.status === 'paid').reduce((sum, t) => [...sum, t.amountToReturn], [10000, 15000, 21000, 18000, 24000, 30000].slice(transactions.length)),
+            borderColor: '#3498db',
+            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+            tension: 0.4,
+            fill: true,
+          },
+          {
+            label: 'Interest Earned',
+            data: transactions.filter(t => t.status === 'paid').reduce((sum, t) => [...sum, t.amountToReturn - t.amountPaid], [2000, 4000, 4000, 4000, 4000, 5000].slice(transactions.length)),
+            borderColor: '#9b59b6',
+            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+            tension: 0.4,
+            fill: true,
+          },
+        ],
+      };
 
   const monthlyDistributionData = {
     labels: packages.map(p => p.name),

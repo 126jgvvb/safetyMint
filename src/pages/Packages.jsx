@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEdit, faTrash, faSnowflake, faArrowUp, faSearch } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEdit, faTrash, faSnowflake, faArrowUp, faSearch, faCheckCircle, faTimesCircle, faUndo, faChartPie } from '@fortawesome/free-solid-svg-icons';
 import { useApp } from '../context/AppContext';
 
 const formatUGX = (amount) => `UGX ${amount.toLocaleString()}`;
@@ -8,6 +8,8 @@ const formatUGX = (amount) => `UGX ${amount.toLocaleString()}`;
 const validatePackageForm = (data) => {
   const errors = {};
   if (!data.name?.trim()) errors.name = 'Package name is required';
+  if (!data.ownerName?.trim()) errors.ownerName = 'Owner name is required';
+  if (!data.ownerPhone?.trim()) errors.ownerPhone = 'Owner phone is required';
   if (!data.interestRate || parseFloat(data.interestRate) < 3) errors.interestRate = 'Interest rate must be at least 3%';
   if (!data.minAmount || parseFloat(data.minAmount) < 10000) errors.minAmount = 'Min amount must be at least UGX 10,000';
   if (!data.maxAmount || parseFloat(data.maxAmount) < 10000) errors.maxAmount = 'Max amount must be at least UGX 10,000';
@@ -35,8 +37,11 @@ export default function Packages() {
   const [search, setSearch] = useState('');
   const [formErrors, setFormErrors] = useState({});
   const [allocateError, setAllocateError] = useState('');
+  const [expandedPackage, setExpandedPackage] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
+    ownerName: '',
+    ownerPhone: '',
     interestRate: '',
     cycle: 'monthly',
     minAmount: '',
@@ -65,18 +70,23 @@ export default function Packages() {
         interestRate: parseFloat(formData.interestRate),
         minAmount: parseFloat(formData.minAmount),
         maxAmount: parseFloat(formData.maxAmount),
+        successfulPayouts: 0,
+        failedPayouts: 0,
+        revokedPayouts: 0,
       });
     }
     setShowModal(false);
     setEditingPackage(null);
     setFormErrors({});
-    setFormData({ name: '', interestRate: '', cycle: 'monthly', minAmount: '', maxAmount: '', subcontractor: '' });
+    setFormData({ name: '', ownerName: '', ownerPhone: '', interestRate: '', cycle: 'monthly', minAmount: '', maxAmount: '', subcontractor: '' });
   };
 
   const handleEdit = (pkg) => {
     setEditingPackage(pkg);
     setFormData({
       name: pkg.name,
+      ownerName: pkg.ownerName || '',
+      ownerPhone: pkg.ownerPhone || '',
       interestRate: pkg.interestRate.toString(),
       cycle: pkg.cycle,
       minAmount: pkg.minAmount.toString(),
@@ -114,18 +124,25 @@ export default function Packages() {
       const searchLower = search.toLowerCase();
       result = result.filter(p => 
         p.name.toLowerCase().includes(searchLower) ||
-        p.subcontractor.toLowerCase().includes(searchLower)
+        p.subcontractor.toLowerCase().includes(searchLower) ||
+        p.ownerName?.toLowerCase().includes(searchLower)
       );
     }
     
     return result;
   }, [packages, filter, search]);
 
+  const getPayoutStats = (pkg) => {
+    const total = (pkg.successfulPayouts || 0) + (pkg.failedPayouts || 0) + (pkg.revokedPayouts || 0);
+    const successRate = total > 0 ? ((pkg.successfulPayouts || 0) / total * 100).toFixed(1) : 0;
+    return { total, successRate };
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Loan Packages</h1>
-        <button className="btn btn-primary" onClick={() => { setShowModal(true); setFormErrors({}); setFormData({ name: '', interestRate: '', cycle: 'monthly', minAmount: '', maxAmount: '', subcontractor: '' }); }}>
+        <button className="btn btn-primary" onClick={() => { setShowModal(true); setFormErrors({}); setFormData({ name: '', ownerName: '', ownerPhone: '', interestRate: '', cycle: 'monthly', minAmount: '', maxAmount: '', subcontractor: '' }); }}>
           <FontAwesomeIcon icon={faPlus} /> Add Package
         </button>
       </div>
@@ -149,16 +166,31 @@ export default function Packages() {
 
       {filteredPackages.map(pkg => {
         const progress = pkg.maxAmount > 0 ? (pkg.currentAmount / pkg.maxAmount) * 100 : 0;
+        const stats = getPayoutStats(pkg);
+        const isExpanded = expandedPackage === pkg.id;
+        
         return (
           <div key={pkg.id} className="package-card">
             <div className="package-header">
               <div>
                 <div className="package-name">{pkg.name}</div>
-                <div className="package-subcontractor">{pkg.subcontractor}</div>
+                <div className="package-subcontractor">
+                  Owner: {pkg.ownerName || 'N/A'} | {pkg.ownerPhone || 'N/A'}
+                </div>
               </div>
-              <span className={`status-badge ${pkg.status === 'active' ? 'status-active' : 'status-frozen'}`}>
-                {pkg.status === 'active' ? 'Active' : 'Frozen'}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span className={`status-badge ${pkg.status === 'active' ? 'status-active' : 'status-frozen'}`}>
+                  {pkg.status === 'active' ? 'Active' : 'Frozen'}
+                </span>
+                <button 
+                  className="action-btn" 
+                  onClick={() => setExpandedPackage(isExpanded ? null : pkg.id)}
+                  title="View Details"
+                  style={{ background: 'var(--accent)', color: 'white' }}
+                >
+                  <FontAwesomeIcon icon={faChartPie} />
+                </button>
+              </div>
             </div>
             <div className="package-details">
               <div className="detail-item">
@@ -178,9 +210,53 @@ export default function Packages() {
                 <span className="detail-value">{formatUGX(pkg.currentAmount)}</span>
               </div>
             </div>
+
+            {isExpanded && (
+              <div style={{ marginTop: '15px', padding: '15px', background: 'var(--secondary)', borderRadius: '8px' }}>
+                <h4 style={{ marginBottom: '15px', color: 'var(--accent)' }}>Payout Performance</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+                  <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(0, 212, 170, 0.15)', borderRadius: '8px' }}>
+                    <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#00d4aa', fontSize: '24px' }} />
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00d4aa' }}>{pkg.successfulPayouts || 0}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Successful</div>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(231, 76, 60, 0.15)', borderRadius: '8px' }}>
+                    <FontAwesomeIcon icon={faTimesCircle} style={{ color: '#e74c3c', fontSize: '24px' }} />
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e74c3c' }}>{pkg.failedPayouts || 0}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Failed</div>
+                  </div>
+                  <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(241, 196, 15, 0.15)', borderRadius: '8px' }}>
+                    <FontAwesomeIcon icon={faUndo} style={{ color: '#f1c40f', fontSize: '24px' }} />
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f1c40f' }}>{pkg.revokedPayouts || 0}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Forcefully Revoked</div>
+                  </div>
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ fontSize: '14px' }}>Total Payouts: {stats.total}</span>
+                    <span style={{ fontSize: '14px', color: '#00d4aa' }}>{stats.successRate}% Success Rate</span>
+                  </div>
+                  <div className="progress-bar" style={{ height: '12px' }}>
+                    {stats.total > 0 && (
+                      <>
+                        <div className="progress-fill" style={{ width: `${(pkg.successfulPayouts / stats.total) * 100}%`, background: '#00d4aa' }}></div>
+                        <div className="progress-fill" style={{ width: `${(pkg.revokedPayouts / stats.total) * 100}%`, background: '#f1c40f', marginLeft: '-1px' }}></div>
+                        <div className="progress-fill" style={{ width: `${(pkg.failedPayouts / stats.total) * 100}%`, background: '#e74c3c', marginLeft: '-1px' }}></div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  <span><span style={{ color: '#00d4aa' }}>■</span> Successful</span>
+                  <span><span style={{ color: '#f1c40f' }}>■</span> Revoked</span>
+                  <span><span style={{ color: '#e74c3c' }}>■</span> Failed</span>
+                </div>
+              </div>
+            )}
+
             <div className="package-progress">
               <div className="progress-label">
-                <span>Payout Progress</span>
+                <span>Lending Progress (based on successful requests)</span>
                 <span>{progress.toFixed(1)}%</span>
               </div>
               <div className="progress-bar">
@@ -216,6 +292,16 @@ export default function Packages() {
                 <label>Package Name</label>
                 <input type="text" value={formData.name} onChange={e => { setFormData({ ...formData, name: e.target.value }); setFormErrors({ ...formErrors, name: '' }); }} required />
                 {formErrors.name && <span style={{ color: 'var(--danger)', fontSize: '12px' }}>{formErrors.name}</span>}
+              </div>
+              <div className="form-group">
+                <label>Package Owner Name</label>
+                <input type="text" value={formData.ownerName} onChange={e => { setFormData({ ...formData, ownerName: e.target.value }); setFormErrors({ ...formErrors, ownerName: '' }); }} required />
+                {formErrors.ownerName && <span style={{ color: 'var(--danger)', fontSize: '12px' }}>{formErrors.ownerName}</span>}
+              </div>
+              <div className="form-group">
+                <label>Package Owner Phone</label>
+                <input type="text" value={formData.ownerPhone} onChange={e => { setFormData({ ...formData, ownerPhone: e.target.value }); setFormErrors({ ...formErrors, ownerPhone: '' }); }} required />
+                {formErrors.ownerPhone && <span style={{ color: 'var(--danger)', fontSize: '12px' }}>{formErrors.ownerPhone}</span>}
               </div>
               <div className="form-group">
                 <label>Interest Rate (%) - Min: 3%</label>
