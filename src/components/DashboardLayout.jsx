@@ -126,31 +126,33 @@
 
        {showProfileModal && (
          <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
-           <div className="modal" onClick={e => e.stopPropagation()}>
-             <h2>Edit Profile</h2>
-             <div className="form-group">
-               <label>Name</label>
-               <input 
-                 type="text" 
-                 value={profileData.name} 
-                 onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                 placeholder="Enter your name"
-               />
-             </div>
-             <div className="form-group">
-               <label>Email</label>
-               <input 
-                 type="email" 
-                 value={profileData.email} 
-                 onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                 placeholder="Enter your email"
-               />
-             </div>
-             <div className="modal-actions">
-               <button className="btn btn-secondary" onClick={() => setShowProfileModal(false)}>Cancel</button>
-               <button className="btn btn-primary" onClick={handleProfileUpdate}>Save</button>
-             </div>
-           </div>
+<div className="modal" onClick={e => e.stopPropagation()}>
+              <h2>Edit Profile</h2>
+              <div className="form-group">
+                <label>Name</label>
+                <input 
+                  type="text" 
+                  value={profileData.name} 
+                  onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                  placeholder="Enter your name"
+                />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input 
+                  type="email" 
+                  value={profileData.email} 
+                  disabled
+                  style={{ backgroundColor: 'var(--secondary)', cursor: 'not-allowed' }}
+                  title="Email cannot be changed - used as unique identifier"
+                />
+                <small style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Email cannot be changed</small>
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => setShowProfileModal(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleProfileUpdate}>Save</button>
+              </div>
+            </div>
          </div>
        )}
 
